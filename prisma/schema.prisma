@@ -1,0 +1,38 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String       @id @default(uuid())
+  matricula String       @unique
+  password  String
+  name      String
+  role      String       // Ex: "2º Tenente"
+  createdAt DateTime     @default(now())
+  
+  occurrences Occurrence[]
+}
+
+model Occurrence {
+  id             String   @id @default(uuid())
+  categoria      String
+  subcategoria   String?
+  prioridade     String
+  descricao      String?
+  endereco       String
+  ponto_referencia String?
+  codigo_viatura String?
+  gps            String?  // Vamos salvar como string "lat,long" para simplificar
+  status         String   @default("Em Andamento")
+  createdAt      DateTime @default(now())
+
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+}
