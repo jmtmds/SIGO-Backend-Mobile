@@ -45,7 +45,9 @@ app.post('/login', async (req, res) => {
     id: user.id,
     name: user.name,
     role: user.role,
-    matricula: user.matricula
+    matricula: user.matricula,
+    email: user.email,
+    phone: user.phone
   });
 });
 
