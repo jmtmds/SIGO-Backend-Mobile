@@ -6,8 +6,9 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
-app.use(cors());
+app.use(cors()); // Libera acesso para o Mobile
 
+// Log de requisições
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`, req.body);
   next();
@@ -15,6 +16,7 @@ app.use((req, res, next) => {
 
 // --- ROTAS DE USUÁRIO ---
 
+// ROTA 1: SEED (Cria usuário inicial)
 app.get('/seed', async (req, res) => {
   try {
     const user = await prisma.user.upsert({
@@ -33,12 +35,13 @@ app.get('/seed', async (req, res) => {
   }
 });
 
+// ROTA 2: LOGIN
 app.post('/login', async (req, res) => {
   const { matricula, password } = req.body;
   const user = await prisma.user.findUnique({ where: { matricula } });
 
   if (!user || user.password !== password) {
-    return res.status(401).json({ error: 'Matrícula ou senha incorretos.' });
+    return res.status(401).json({ error: 'Credenciais inválidas' });
   }
   return res.json({
     id: user.id,
@@ -48,6 +51,7 @@ app.post('/login', async (req, res) => {
   });
 });
 
+// ROTA 3: PERFIL
 app.get('/user/profile', async (req, res) => {
   const user = await prisma.user.findUnique({ where: { matricula: '123456' }});
   res.json(user);
@@ -55,6 +59,7 @@ app.get('/user/profile', async (req, res) => {
 
 // --- ROTAS DE OCORRÊNCIA ---
 
+// ROTA 4: DASHBOARD STATS
 app.get('/dashboard/stats', async (req, res) => {
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -67,10 +72,13 @@ app.get('/dashboard/stats', async (req, res) => {
   });
 });
 
+// ROTA 5: NOVA OCORRÊNCIA (POST)
 app.post('/occurrence/new', async (req, res) => {
   try {
     const data = req.body;
     let userId = data.userId;
+    
+    // Fallback se não vier usuário
     if (!userId) {
        const defaultUser = await prisma.user.findUnique({ where: { matricula: '123456'}});
        userId = defaultUser?.id || 'erro-sem-user';
@@ -87,7 +95,7 @@ app.post('/occurrence/new', async (req, res) => {
         codigo_viatura: data.codigo_viatura,
         gps: JSON.stringify(data.gps),
         userId: userId,
-        status: "Aberta"
+        status: "Aberta" // <--- FORÇA STATUS INICIAL
       }
     });
     res.json(occurrence);
@@ -97,25 +105,29 @@ app.post('/occurrence/new', async (req, res) => {
   }
 });
 
-// Rota de Listagem
+// ROTA 6: LISTAR OCORRÊNCIAS DO USUÁRIO (GET)
 app.get('/user/:id/occurrences', async (req, res) => {
   const { id } = req.params;
+  
   let userIdToUse = id;
   if (id === 'undefined' || !id) {
     const defaultUser = await prisma.user.findUnique({ where: { matricula: '123456'}});
     userIdToUse = defaultUser?.id || '';
   }
+
   const list = await prisma.occurrence.findMany({
     where: { userId: userIdToUse },
     orderBy: { createdAt: 'desc' }
   });
+
   res.json(list);
 });
 
-// Rota de Mudar Status
+// ROTA 7: ATUALIZAR STATUS (PATCH)
 app.patch('/occurrence/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body; 
+
   try {
     const updated = await prisma.occurrence.update({
       where: { id },
@@ -123,14 +135,15 @@ app.patch('/occurrence/:id/status', async (req, res) => {
     });
     res.json(updated);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Erro ao atualizar status" });
   }
 });
 
-// --- NOVA ROTA: EDITAR DETALHES (PUT) ---
+// ROTA 8: EDITAR DETALHES (PUT) - ROTA NOVA
 app.put('/occurrence/:id', async (req, res) => {
   const { id } = req.params;
-  const data = req.body; // Recebe os novos dados (descricao, endereco, etc)
+  const data = req.body;
 
   try {
     const updated = await prisma.occurrence.update({
@@ -140,13 +153,26 @@ app.put('/occurrence/:id', async (req, res) => {
         endereco: data.endereco,
         ponto_referencia: data.ponto_referencia,
         prioridade: data.prioridade,
-        // Adicione outros campos se quiser permitir editar
       }
     });
     res.json(updated);
   } catch (error) {
     console.error("Erro ao editar:", error);
     res.status(500).json({ error: "Erro ao editar ocorrência" });
+  }
+});
+
+// ROTA 9: DELETAR OCORRÊNCIA (DELETE) - ROTA NOVA
+app.delete('/occurrence/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await prisma.occurrence.delete({
+      where: { id }
+    });
+    res.json({ message: "Ocorrência deletada com sucesso" });
+  } catch (error) {
+    console.error("Erro ao deletar:", error);
+    res.status(500).json({ error: "Erro ao deletar ocorrência" });
   }
 });
 
