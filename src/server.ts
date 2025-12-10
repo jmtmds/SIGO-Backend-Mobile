@@ -6,17 +6,15 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
-app.use(cors()); // Libera acesso para o Mobile
+app.use(cors());
 
-// Log de requisições
+// Log para debug
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.url}`, req.body);
   next();
 });
 
-// --- ROTAS DE USUÁRIO ---
-
-// ROTA 1: SEED (Cria usuário inicial)
+// --- ROTA DE SEED ---
 app.get('/seed', async (req, res) => {
   try {
     const user = await prisma.user.upsert({
@@ -35,7 +33,7 @@ app.get('/seed', async (req, res) => {
   }
 });
 
-// ROTA 2: LOGIN
+// --- ROTA LOGIN ---
 app.post('/login', async (req, res) => {
   const { matricula, password } = req.body;
   const user = await prisma.user.findUnique({ where: { matricula } });
@@ -51,37 +49,39 @@ app.post('/login', async (req, res) => {
   });
 });
 
-// ROTA 3: PERFIL
 app.get('/user/profile', async (req, res) => {
   const user = await prisma.user.findUnique({ where: { matricula: '123456' }});
   res.json(user);
 });
 
-// --- ROTAS DE OCORRÊNCIA ---
-
-// ROTA 4: DASHBOARD STATS
+// --- CORREÇÃO AQUI: DASHBOARD STATS ---
 app.get('/dashboard/stats', async (req, res) => {
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const count = await prisma.occurrence.count({ where: { createdAt: { gte: today } } });
+  // ANTES: Contava só as de hoje (createdAt >= today)
+  // AGORA: Conta todas que NÃO estão finalizadas (Ativas)
+  
+  const count = await prisma.occurrence.count({
+    where: {
+      status: {
+        not: 'Finalizada' // Conta 'Aberta' e 'Em Andamento'
+      }
+    }
+  });
   
   res.json({
-    occurrences_today: count,
+    occurrences_today: count, // Mantive o nome da variável pro front não quebrar
     available_vehicles: 2,
     team_status: "Operacional"
   });
 });
 
-// ROTA 5: NOVA OCORRÊNCIA (POST)
+// --- ROTA NOVA OCORRÊNCIA ---
 app.post('/occurrence/new', async (req, res) => {
   try {
     const data = req.body;
     let userId = data.userId;
-    
-    // Fallback se não vier usuário
     if (!userId) {
        const defaultUser = await prisma.user.findUnique({ where: { matricula: '123456'}});
-       userId = defaultUser?.id || 'erro-sem-user';
+       userId = defaultUser?.id;
     }
 
     const occurrence = await prisma.occurrence.create({
@@ -95,20 +95,18 @@ app.post('/occurrence/new', async (req, res) => {
         codigo_viatura: data.codigo_viatura,
         gps: JSON.stringify(data.gps),
         userId: userId,
-        status: "Aberta" // <--- FORÇA STATUS INICIAL
+        status: "Aberta"
       }
     });
     res.json(occurrence);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Erro ao salvar ocorrência" });
   }
 });
 
-// ROTA 6: LISTAR OCORRÊNCIAS DO USUÁRIO (GET)
+// --- LISTAR OCORRÊNCIAS ---
 app.get('/user/:id/occurrences', async (req, res) => {
   const { id } = req.params;
-  
   let userIdToUse = id;
   if (id === 'undefined' || !id) {
     const defaultUser = await prisma.user.findUnique({ where: { matricula: '123456'}});
@@ -119,15 +117,13 @@ app.get('/user/:id/occurrences', async (req, res) => {
     where: { userId: userIdToUse },
     orderBy: { createdAt: 'desc' }
   });
-
   res.json(list);
 });
 
-// ROTA 7: ATUALIZAR STATUS (PATCH)
+// --- ATUALIZAR STATUS ---
 app.patch('/occurrence/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body; 
-
   try {
     const updated = await prisma.occurrence.update({
       where: { id },
@@ -135,16 +131,14 @@ app.patch('/occurrence/:id/status', async (req, res) => {
     });
     res.json(updated);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Erro ao atualizar status" });
   }
 });
 
-// ROTA 8: EDITAR DETALHES (PUT) - ROTA NOVA
+// --- EDITAR DADOS ---
 app.put('/occurrence/:id', async (req, res) => {
   const { id } = req.params;
   const data = req.body;
-
   try {
     const updated = await prisma.occurrence.update({
       where: { id },
@@ -157,22 +151,18 @@ app.put('/occurrence/:id', async (req, res) => {
     });
     res.json(updated);
   } catch (error) {
-    console.error("Erro ao editar:", error);
     res.status(500).json({ error: "Erro ao editar ocorrência" });
   }
 });
 
-// ROTA 9: DELETAR OCORRÊNCIA (DELETE) - ROTA NOVA
+// --- DELETAR ---
 app.delete('/occurrence/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await prisma.occurrence.delete({
-      where: { id }
-    });
-    res.json({ message: "Ocorrência deletada com sucesso" });
+    await prisma.occurrence.delete({ where: { id } });
+    res.json({ message: "Deletado com sucesso" });
   } catch (error) {
-    console.error("Erro ao deletar:", error);
-    res.status(500).json({ error: "Erro ao deletar ocorrência" });
+    res.status(500).json({ error: "Erro ao deletar" });
   }
 });
 
